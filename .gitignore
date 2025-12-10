@@ -1,1 +1,5 @@
 src/py/__pycache__/
+*.cmd
+*.smd
+*.3ds
+src/cpp/*.exe
