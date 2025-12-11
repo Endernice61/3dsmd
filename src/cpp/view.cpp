@@ -6,29 +6,31 @@
 #include <time.h>
 #include <chrono>
 #include "buffer.cpp"
+#include "overloads.cpp"
 #define DEBUG_CHUNK 0
 
 const std::string BRANCH = "+-+------------";
 const std::string LEAF = "+--------------";
 
-std::string indents(int indent) {
-	std::string out = "";
-	for (;indent > 0;--indent) { out += "| "; }
-	return out;
-}
+std::string indents(int indent) { return "| "s*indent; }
 
 int read(std::ifstream& f, int c) {
 	int ret = 0;
 	for (int i = 0; i<c; ++i) {
 		unsigned char byte = f.get();
 		ret |= ((int)byte)<<(i*8);
-	}
-	return ret;
+	} return ret;
 }
 
 float readf(std::ifstream& f) {
 	int ret = read(f,4);
 	return *(float*)(&ret);
+}
+
+void printHead(Buffer& b,int depth, std::string chunk_name, int chunk_length) {
+	b << indents(depth) << BRANCH << '\n';
+	b << indents(depth+2) << chunk_name << '\n';
+	b << indents(depth+2) << "length = " << chunk_length << '\n';
 }
 
 void read_chunk(Buffer& b,std::ifstream& f) {
@@ -47,37 +49,30 @@ void read_chunk(Buffer& b,std::ifstream& f) {
 			if (chunk_length > 6) { read_chunk(b,f); }
 			b << LEAF << '\n';
 		} else if (chunk_id == 0x3d3d) {
-			b << BRANCH << '\n';
-			b << indents(2) << "3D EDITOR CHUNK" << '\n';
-			b << indents(2) << "length = " << chunk_length << '\n';
+			printHead(b,0,"3D EDITOR CHUNK",chunk_length);
 			if (chunk_length > 6) { read_chunk(b,f); }
 			b << indents(1) << LEAF << '\n';
 		} else if (chunk_id == 0x4000) {
-			b << indents(1) << BRANCH << '\n';
-			b << indents(3) << "OBJECT BLOCK" << '\n';
-			b << indents(3) << "length = " << chunk_length << '\n';
+			printHead(b,1,"OBJECT BLOCK",chunk_length);
+			
 			b << indents(3) << "Object name = ";
-			int read = 0;
+			int read = 1;
 			char name = f.get();
-			read = 1;
-			b << name;
 			while (name != '\0') {
-				name = f.get();
 				b << name;
+				name = f.get();
 				++read;
 			} b << '\n';
+			
 			if (chunk_length > read+6) { read_chunk(b,f); }
 			b << indents(2) << LEAF << '\n';
 		} else if (chunk_id == 0x4100) {
-			b << indents(2) << BRANCH << '\n';
-			b << indents(4) << "TRIANGULAR MESH" << '\n';
-			b << indents(4) << "length = " << chunk_length << '\n';
+			printHead(b,2,"TRIANGULAR MESH",chunk_length);
 			if (chunk_length > 6) { read_chunk(b,f); }
 			b << indents(3) << LEAF << '\n';
 		} else if (chunk_id == 0x4110) {
-			b << indents(3) << BRANCH << '\n';
-			b << indents(5) << "VERTICES LIST" << '\n';
-			b << indents(5) << "length = " << chunk_length << '\n';
+			printHead(b,3,"VERTICES LIST",chunk_length);
+			
 			b << indents(5) << "Vertices number = ";
 			int data_length = read(f,2);
 			b << data_length << '\n';
@@ -86,14 +81,13 @@ void read_chunk(Buffer& b,std::ifstream& f) {
 			for (int vertices_read = 0; vertices_read < data_length; ++vertices_read) {
 				if (vertices_read > 0) { b << ", "; }
 				b << "[" << readf(f) << " " << readf(f) << " " << readf(f) << "]";
-			}
-			b << '\n';
+			} b << '\n';
+			
 			if (chunk_length > data_length*12+2+6) { throw "VERTICES LIST has extra length!"; }
 			b << indents(4) << LEAF << '\n';
 		} else if (chunk_id == 0x4120) {
-			b << indents(3) << BRANCH << '\n';
-			b << indents(5) << "FACES DESCRIPTION" << '\n';
-			b << indents(5) << "length = " << chunk_length << '\n';
+			printHead(b,3,"FACES DESCRIPTION",chunk_length);
+			
 			b << indents(5) << "Polygons number = ";
 			int data_length = read(f,2);
 			b << data_length << '\n';
@@ -102,11 +96,13 @@ void read_chunk(Buffer& b,std::ifstream& f) {
 				if (polygons_read > 0) { b << ", "; }
 				b << "[" << read(f,2) << " " << read(f,2) << " " << read(f,2) << "]";
 				read(f,2);
-			}
-			b << '\n';
+			} b << '\n';
+			
 			if (chunk_length > data_length*8+2+6) { read_chunk(b,f); }
 			b << indents(4) << LEAF << '\n';
 		} else {
+			//Discard the chunk
+			//Will put the stream before the end of file
 			f.seekg(chunk_length-6,std::ios::cur);
 		}
 	}
